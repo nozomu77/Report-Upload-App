@@ -4,169 +4,124 @@
 var CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 var CLAUDE_MODEL   = 'claude-sonnet-4-6';
 
-var OCR_PROMPT = [
-  '以下は運送ドライバーの月次稼働報告書です。',
-  '日別の「開始時間」と「終了時間」のみを読み取ってください。',
+var OCR_PROMPT_BASE = [
+  'これはドライバーの月次稼働報告書の画像です。',
+  '日付ごとの「開始時間」と「終了時間」を読み取り、以下のJSON形式のみで返してください。',
   '',
-  '出力形式（JSON）:',
-  '{',
-  '  "days": [',
-  '    { "day": 1, "start": "08:00", "end": "17:30" },',
-  '    { "day": 2, "start": null,    "end": null    },',
-  '    ...',
-  '  ]',
-  '}',
+  '{"days":[{"day":1,"start":"08:00","end":"17:30"},{"day":2,"start":null,"end":null},...]}',
   '',
-  '注意:',
-  '- 稼働○×は判定に使わない。開始時間が記入されている日のみ稼働と判定する。',
-  '- 読み取れない場合は null を入れる。',
-  '- サマリ行（合計欄）は無視する。',
-  '- day は月の日付（1〜31の整数）。',
+  '【ルール】',
+  '- dayは日付の数字（1〜31の整数）',
+  '- 時間はHH:MM形式（例: 08:00, 17:30）',
+  '- 開始時間が記入されていない日はstart/endともnull',
+  '- 合計行・集計欄は無視する',
+  '- サマリ値は使わず、日別データだけを返す',
+  '- JSONブロックのみを返し、説明文は不要',
 ].join('\n');
 
-function runOcr(receivedFileId) {
-  var ss         = SpreadsheetApp.openById(SHEET_ID);
-  var recvSheet  = ss.getSheetByName(SHEET_RECEIVED);
-  var data       = recvSheet.getDataRange().getValues();
+// ===== メイン関数 =====
 
-  // 受信ファイルシートから対象行を探す
-  var rowIndex = -1;
-  var rowData;
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][5] === receivedFileId) { // DriveファイルID列
-      rowIndex = i + 1; // 1-indexed for sheet
-      rowData  = data[i];
-      break;
-    }
-  }
-  if (rowIndex === -1) throw new Error('File not found: ' + receivedFileId);
+// Code.gsのhandleUploadReportから呼ばれる
+function runOcr(fileId, yearMonth, lineUserId, leftBase64, rightBase64, pdfBase64) {
+  var driver = getDriverByUserId(lineUserId);
+  if (!driver) throw new Error('Driver not found: ' + lineUserId);
 
-  var lineUserId  = rowData[1];
-  var driverName  = rowData[2];
-  var yearMonth   = rowData[3]; // "2026-05"
-  var fileType    = rowData[4];
-  var driveFileId = rowData[5];
-
-  // ステータスを「OCR中」に更新
-  recvSheet.getRange(rowIndex, 8).setValue('OCR中');
+  updateReceivedFileStatus_(fileId, 'OCR中');
 
   try {
-    var file     = DriveApp.getFileById(driveFileId);
-    var blob     = file.getBlob();
-    var results  = callClaudeOcr_(blob, fileType, driverName, yearMonth);
+    var days;
 
-    // OCR結果をシートに書き込み
-    writeOcrResults_(lineUserId, driverName, yearMonth, receivedFileId, results);
+    if (pdfBase64) {
+      var raw  = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
+      days = parseDays_(raw);
+    } else {
+      var leftRaw  = callClaudeApi_(leftBase64,  'image/jpeg', OCR_PROMPT_BASE + '\n（これは月報の左半分です）');
+      var rightRaw = callClaudeApi_(rightBase64, 'image/jpeg', OCR_PROMPT_BASE + '\n（これは月報の右半分です）');
+      days = mergeHalves_(parseDays_(leftRaw), parseDays_(rightRaw));
+    }
 
-    // ステータスを「確認待ち」に更新
-    recvSheet.getRange(rowIndex, 8).setValue('確認待ち');
-    recvSheet.getRange(rowIndex, 9).setValue(new Date()); // OCR実行日時
+    writeOcrResults_(lineUserId, driver.name, yearMonth, fileId, days);
+    updateReceivedFileStatus_(fileId, '確認待ち');
+    updateReceivedOcrTime_(fileId);
+
+    return { workingDays: countWorkingDays_(days), days: days };
+
   } catch (err) {
-    recvSheet.getRange(rowIndex, 8).setValue('OCRエラー');
+    updateReceivedFileStatus_(fileId, 'OCRエラー');
     throw err;
   }
 }
 
-function callClaudeOcr_(blob, fileType, driverName, yearMonth) {
+// ===== Claude API呼び出し =====
+
+function callClaudeApi_(base64, mimeType, prompt) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('CLAUDE_API_KEY');
   if (!apiKey) throw new Error('CLAUDE_API_KEY not set in Script Properties');
 
-  var days = [];
+  var contentItem = mimeType === 'application/pdf'
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+    : { type: 'image',    source: { type: 'base64', media_type: mimeType,           data: base64 } };
 
-  if (fileType === 'image') {
-    // 左右分割して2回送信（縦解像度を確保）
-    var halves = splitImageLeftRight_(blob);
-    var leftResult  = sendToClaudeVision_(apiKey, halves[0], 'image/jpeg', OCR_PROMPT + '\n（左半分のページです）');
-    var rightResult = sendToClaudeVision_(apiKey, halves[1], 'image/jpeg', OCR_PROMPT + '\n（右半分のページです）');
-    days = mergeHalves_(leftResult, rightResult);
-  } else {
-    // PDFはそのまま送信
-    var pdfResult = sendToClaudeVision_(apiKey, blob, 'application/pdf', OCR_PROMPT);
-    days = pdfResult.days || [];
-  }
-
-  return days;
-}
-
-function sendToClaudeVision_(apiKey, blob, mimeType, prompt) {
-  var base64 = Utilities.base64Encode(blob.getBytes());
-
-  var sourceType = mimeType === 'application/pdf' ? 'base64' : 'base64';
-  var mediaTypeForApi = mimeType;
-
-  var requestBody = {
-    model: CLAUDE_MODEL,
-    max_tokens: 4096,
+  var body = {
+    model:      CLAUDE_MODEL,
+    max_tokens: 2048,
     messages: [{
       role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: mediaTypeForApi,
-            data: base64
-          }
-        },
-        {
-          type: 'text',
-          text: prompt
-        }
-      ]
+      content: [contentItem, { type: 'text', text: prompt }]
     }]
   };
 
-  var response = UrlFetchApp.fetch(CLAUDE_API_URL, {
-    method: 'post',
+  var res = UrlFetchApp.fetch(CLAUDE_API_URL, {
+    method:           'post',
     headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json'
+      'x-api-key':          apiKey,
+      'anthropic-version':  '2023-06-01',
+      'content-type':       'application/json',
     },
-    payload: JSON.stringify(requestBody),
-    muteHttpExceptions: true
+    payload:          JSON.stringify(body),
+    muteHttpExceptions: true,
   });
 
-  var result = JSON.parse(response.getContentText());
-  if (result.error) throw new Error('Claude API error: ' + result.error.message);
+  var json = JSON.parse(res.getContentText());
+  if (json.error) throw new Error('Claude API error: ' + json.error.message);
 
-  var text = result.content[0].text;
+  return json.content[0].text;
+}
 
-  // JSONブロックを抽出
+// ===== パース・マージ =====
+
+function parseDays_(text) {
   var match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Could not parse OCR response: ' + text);
-  return JSON.parse(match[0]);
+  if (!match) throw new Error('OCRレスポンスからJSONを取得できませんでした: ' + text.substring(0, 200));
+  var parsed = JSON.parse(match[0]);
+  return parsed.days || [];
 }
 
-function splitImageLeftRight_(blob) {
-  // GASにはCanvas APIがないため、UrlFetchAppで外部サービスを呼ぶか
-  // 画像をそのまま2枚複製して送信する簡易スタブ
-  // TODO: 実際の左右分割実装（サーバーサイド画像処理 or Cloudinary等）
-  return [blob, blob];
-}
-
-function mergeHalves_(leftResult, rightResult) {
-  // 左半分・右半分のOCR結果をマージ
-  // 左: 1〜15日付近、右: 16〜31日付近が多いが帳票に依存
-  // 実際の帳票を見て調整する
-  var merged = [];
-  var allDays = (leftResult.days || []).concat(rightResult.days || []);
-
-  // 同じ日が重複したら後者（右半分）で上書き
+function mergeHalves_(leftDays, rightDays) {
   var map = {};
-  allDays.forEach(function(d) {
-    if (!map[d.day] || (d.start !== null)) {
+
+  // 両方の結果をマージ。同じ日は start が非nullの方を優先
+  leftDays.concat(rightDays).forEach(function(d) {
+    if (!map[d.day] || (d.start !== null && map[d.day].start === null)) {
       map[d.day] = d;
     }
   });
 
+  var result = [];
   for (var day = 1; day <= 31; day++) {
-    if (map[day]) merged.push(map[day]);
+    if (map[day]) result.push(map[day]);
   }
-  return merged;
+  return result;
 }
 
-function writeOcrResults_(lineUserId, driverName, yearMonth, receivedFileId, days) {
+// 稼働日数 = 開始時間が記入されている日の数（APIサマリ値は使用しない）
+function countWorkingDays_(days) {
+  return days.filter(function(d) { return d.start !== null; }).length;
+}
+
+// ===== Sheets書き込み =====
+
+function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days) {
   var ss    = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_OCR);
 
@@ -178,38 +133,51 @@ function writeOcrResults_(lineUserId, driverName, yearMonth, receivedFileId, day
     }
   }
 
-  // 新しい行を追加
-  days.forEach(function(d) {
-    var isWorking = d.start !== null; // 開始時間あり = 稼働日
-    sheet.appendRow([
-      lineUserId,       // LINEユーザーID
-      driverName,       // ドライバー名
-      yearMonth,        // 年月
-      d.day,            // 日
-      d.start || '',    // 開始時間
-      d.end   || '',    // 終了時間
-      isWorking,        // 稼働フラグ
-      false,            // 立替経費フラグ（TODO）
-      false,            // 備考フラグ（TODO）
-      '未確認',          // 確認ステータス
-      '',               // 修正後開始時間
-      '',               // 修正後終了時間
-      receivedFileId    // 受信ファイルID
-    ]);
+  if (days.length === 0) return;
+
+  var rows = days.map(function(d) {
+    return [
+      lineUserId,          // LINEユーザーID
+      driverName,          // ドライバー名
+      yearMonth,           // 年月
+      d.day,               // 日
+      d.start || '',       // 開始時間
+      d.end   || '',       // 終了時間
+      d.start !== null,    // 稼働フラグ
+      false,               // 立替経費フラグ（TODO）
+      false,               // 備考フラグ（TODO）
+      '未確認',             // 確認ステータス
+      '',                  // 修正後開始時間
+      '',                  // 修正後終了時間
+      fileId               // 受信ファイルID
+    ];
   });
+
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
-// 稼働日数を日別データから自前カウント（APIサマリ値は使用しない）
-function countWorkingDays(lineUserId, yearMonth) {
+function updateReceivedFileStatus_(fileId, status) {
   var ss    = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheetByName(SHEET_OCR);
+  var sheet = ss.getSheetByName(SHEET_RECEIVED);
   var data  = sheet.getDataRange().getValues();
 
-  var count = 0;
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === lineUserId && data[i][2] === yearMonth && data[i][6] === true) {
-      count++;
+    if (data[i][5] === fileId) {
+      sheet.getRange(i + 1, 8).setValue(status);
+      return;
     }
   }
-  return count;
+}
+
+function updateReceivedOcrTime_(fileId) {
+  var ss    = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_RECEIVED);
+  var data  = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][5] === fileId) {
+      sheet.getRange(i + 1, 9).setValue(new Date());
+      return;
+    }
+  }
 }

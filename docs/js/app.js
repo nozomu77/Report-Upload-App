@@ -54,21 +54,83 @@ function initApp() {
 // ===== API呼び出し =====
 
 function uploadReport(yearMonth, file) {
+  var isPdf = file.type === 'application/pdf';
+
+  if (isPdf) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var base64 = e.target.result.split(',')[1];
+        gasPost({
+          action:     'uploadReport',
+          lineUserId: state.lineUserId,
+          yearMonth:  yearMonth,
+          mimeType:   'application/pdf',
+          fileBase64: base64,
+          fileName:   file.name,
+        }).then(resolve).catch(reject);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 画像: Canvas で左右分割してから送信（縦解像度を確保し精度を上げる）
+  return splitImageHalves(file).then(function(halves) {
+    return gasPost({
+      action:          'uploadReport',
+      lineUserId:      state.lineUserId,
+      yearMonth:       yearMonth,
+      mimeType:        'image/jpeg',
+      fileBase64:      halves.full,
+      fileBase64Left:  halves.left,
+      fileBase64Right: halves.right,
+      fileName:        file.name,
+    });
+  });
+}
+
+// Canvas を使って画像を左右半分に分割し base64 で返す
+function splitImageHalves(file) {
   return new Promise(function(resolve, reject) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var base64 = e.target.result.split(',')[1];
-      gasPost({
-        action:      'uploadReport',
-        lineUserId:  state.lineUserId,
-        yearMonth:   yearMonth,
-        mimeType:    file.type || 'image/jpeg',
-        fileBase64:  base64,
-        fileName:    file.name,
-      }).then(resolve).catch(reject);
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function() {
+      URL.revokeObjectURL(url);
+
+      // 長辺が2000pxを超える場合は縮小（GAS転送サイズ削減）
+      var MAX = 2000;
+      var scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      var w = Math.round(img.width  * scale);
+      var h = Math.round(img.height * scale);
+      var midX = Math.round(w / 2);
+
+      // フル画像
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      var full = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+      // 左半分
+      var cL = document.createElement('canvas');
+      cL.width = midX; cL.height = h;
+      cL.getContext('2d').drawImage(img, 0, 0, w, h, 0, 0, w, h);
+      // 右端を切り捨て（左半分のみ表示）
+      var cL2 = document.createElement('canvas');
+      cL2.width = midX; cL2.height = h;
+      cL2.getContext('2d').drawImage(canvas, 0, 0, midX, h, 0, 0, midX, h);
+      var left = cL2.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+      // 右半分
+      var cR = document.createElement('canvas');
+      cR.width = w - midX; cR.height = h;
+      cR.getContext('2d').drawImage(canvas, midX, 0, w - midX, h, 0, 0, w - midX, h);
+      var right = cR.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+      resolve({ full: full, left: left, right: right });
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    img.onerror = reject;
+    img.src = url;
   });
 }
 
