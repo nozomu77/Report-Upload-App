@@ -6,17 +6,24 @@ var CLAUDE_MODEL   = 'claude-sonnet-4-6';
 
 var OCR_PROMPT_BASE = [
   'これはドライバーの月次稼働報告書の画像です。',
-  '日付ごとの「開始時間」と「終了時間」を読み取り、以下のJSON形式のみで返してください。',
+  '日付ごとのデータを読み取り、以下のJSON形式のみで返してください。',
   '',
-  '{"days":[{"day":1,"start":"08:00","end":"17:30"},{"day":2,"start":null,"end":null},...]}',
+  '{"days":[',
+  '  {"day":1,"start":"08:00","end":"17:30","expense":false,"note":false},',
+  '  {"day":2,"start":null,"end":null,"expense":false,"note":false},',
+  '  ...',
+  ']}',
   '',
-  '【ルール】',
-  '- dayは日付の数字（1〜31の整数）',
-  '- 時間はHH:MM形式（例: 08:00, 17:30）',
-  '- 開始時間が記入されていない日はstart/endともnull',
+  '【各フィールドのルール】',
+  '- day: 日付の数字（1〜31の整数）',
+  '- start/end: HH:MM形式。開始時間が記入されていない日はnull',
+  '- expense: その日の行に立替経費・費用の記入があればtrue',
+  '- note: その日の行に申し送り・備考の記入（塗りつぶしや文字）があればtrue',
+  '',
+  '【共通ルール】',
   '- 合計行・集計欄は無視する',
-  '- サマリ値は使わず、日別データだけを返す',
-  '- JSONブロックのみを返し、説明文は不要',
+  '- サマリ値は使わず日別データだけを返す',
+  '- JSONブロックのみを返し説明文は不要',
 ].join('\n');
 
 // ===== メイン関数 =====
@@ -137,19 +144,19 @@ function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days) {
 
   var rows = days.map(function(d) {
     return [
-      lineUserId,          // LINEユーザーID
-      driverName,          // ドライバー名
-      yearMonth,           // 年月
-      d.day,               // 日
-      d.start || '',       // 開始時間
-      d.end   || '',       // 終了時間
-      d.start !== null,    // 稼働フラグ
-      false,               // 立替経費フラグ（TODO）
-      false,               // 備考フラグ（TODO）
-      '未確認',             // 確認ステータス
-      '',                  // 修正後開始時間
-      '',                  // 修正後終了時間
-      fileId               // 受信ファイルID
+      lineUserId,            // LINEユーザーID
+      driverName,            // ドライバー名
+      yearMonth,             // 年月
+      d.day,                 // 日
+      d.start || '',         // 開始時間
+      d.end   || '',         // 終了時間
+      d.start !== null,      // 稼働フラグ
+      d.expense === true,    // 立替経費フラグ
+      d.note    === true,    // 備考フラグ
+      '未確認',               // 確認ステータス
+      '',                    // 修正後開始時間
+      '',                    // 修正後終了時間
+      fileId                 // 受信ファイルID
     ];
   });
 

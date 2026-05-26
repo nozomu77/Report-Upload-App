@@ -157,17 +157,19 @@ function renderOcrTable(days, driver) {
     var displayEnd   = d.fixedEnd   || d.end   || '';
     var isWorking    = displayStart !== '';
     var dotClass     = isWorking ? 'yes' : 'no';
-    var noteHtml     = d.noteFlag ? '<span title="備考あり">📝</span>' : '';
+    var startModified = d.fixedStart ? ' modified' : '';
+    var endModified   = d.fixedEnd   ? ' modified' : '';
+    var expenseHtml  = d.expenseFlag ? '<span class="flag-badge expense" title="立替経費あり">￥</span>' : '';
+    var noteHtml     = d.noteFlag    ? '<span class="flag-badge note"    title="備考あり">📝</span>'    : '';
     return [
       '<tr>',
       '<td style="font-weight:600;color:var(--text-sub)">' + d.day + '</td>',
-      '<td><input type="text" class="time-input" data-day="' + d.day + '" data-field="start"' +
-          ' value="' + displayStart + '" placeholder="--:--"' +
-          (d.fixedStart ? ' class="time-input modified"' : ' class="time-input"') + '></td>',
-      '<td><input type="text" class="time-input" data-day="' + d.day + '" data-field="end"' +
-          ' value="' + displayEnd + '" placeholder="--:--"' +
-          (d.fixedEnd ? ' class="time-input modified"' : ' class="time-input"') + '></td>',
+      '<td><input type="text" class="time-input' + startModified + '" data-day="' + d.day + '" data-field="start"' +
+          ' value="' + displayStart + '" placeholder="--:--"></td>',
+      '<td><input type="text" class="time-input' + endModified   + '" data-day="' + d.day + '" data-field="end"' +
+          ' value="' + displayEnd + '" placeholder="--:--"></td>',
       '<td><span class="working-dot ' + dotClass + '"></span></td>',
+      '<td>' + expenseHtml + '</td>',
       '<td>' + noteHtml + '</td>',
       '</tr>',
     ].join('');

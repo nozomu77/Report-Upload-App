@@ -267,4 +267,14 @@ tbody tr:hover { background: #f8f9fa; }
   font-size: 14px;
   z-index: 300;
 }
+.flag-badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.flag-badge.expense { background: #fef7e0; color: #b06000; }
+.flag-badge.note    { background: #e8f0fe; color: var(--primary); }
+
 .hidden { display: none !important; }

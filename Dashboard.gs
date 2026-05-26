@@ -30,7 +30,7 @@ function handleAdminGetOverview_(payload) {
 
   var stats = { total: 0, pending: 0, confirmed: 0, ocrError: 0 };
   data.slice(1).forEach(function(row) {
-    if (row[3] !== yearMonth) return;
+    if (normalizeYearMonth_(row[3]) !== yearMonth) return;
     stats.total++;
     if      (row[7] === '確認待ち')  stats.pending++;
     else if (row[7] === '確定')      stats.confirmed++;
@@ -59,7 +59,7 @@ function handleAdminGetDriverList_(payload) {
   // 対象年月の受信ファイルをドライバーごとに集約（最新1件）
   var submissionMap = {};
   recvData.slice(1).forEach(function(row) {
-    if (row[3] !== yearMonth) return;
+    if (normalizeYearMonth_(row[3]) !== yearMonth) return;
     var uid = row[1];
     var ts  = row[0] ? new Date(row[0]).getTime() : 0;
     if (!submissionMap[uid] || ts > submissionMap[uid].ts) {
@@ -76,7 +76,7 @@ function handleAdminGetDriverList_(payload) {
   // 稼働日数（修正後を優先）
   var workingDaysMap = {};
   ocrData.slice(1).forEach(function(row) {
-    if (row[2] !== yearMonth) return;
+    if (normalizeYearMonth_(row[2]) !== yearMonth) return;
     var uid       = row[0];
     var startVal  = row[10] || row[4]; // 修正後開始時間 or OCR開始時間
     var isWorking = startVal !== '' && startVal !== null;
@@ -86,7 +86,7 @@ function handleAdminGetDriverList_(payload) {
   // 月次確定データ
   var confirmedMap = {};
   monthlyData.slice(1).forEach(function(row) {
-    if (row[2] === yearMonth) confirmedMap[row[0]] = { billingAmount: row[7] };
+    if (normalizeYearMonth_(row[2]) === yearMonth) confirmedMap[row[0]] = { billingAmount: row[7] };
   });
 
   var list = Object.keys(submissionMap).map(function(uid) {
@@ -123,17 +123,17 @@ function handleAdminGetOcrDetail_(payload) {
   var ocrData = ss.getSheetByName(SHEET_OCR).getDataRange().getValues();
   var days = [];
   ocrData.slice(1).forEach(function(row) {
-    if (row[0] !== lineUserId || row[2] !== yearMonth) return;
+    if (row[0] !== lineUserId || normalizeYearMonth_(row[2]) !== yearMonth) return;
     days.push({
       day:         row[3],
-      start:       row[4]  || '',
-      end:         row[5]  || '',
+      start:       normalizeTime_(row[4]),
+      end:         normalizeTime_(row[5]),
       isWorking:   row[6],
       expenseFlag: row[7],
       noteFlag:    row[8],
       status:      row[9],
-      fixedStart:  row[10] || '',
-      fixedEnd:    row[11] || '',
+      fixedStart:  normalizeTime_(row[10]),
+      fixedEnd:    normalizeTime_(row[11]),
     });
   });
   days.sort(function(a, b) { return a.day - b.day; });
@@ -141,7 +141,7 @@ function handleAdminGetOcrDetail_(payload) {
   var recvData = ss.getSheetByName(SHEET_RECEIVED).getDataRange().getValues();
   var fileUrl  = '';
   recvData.slice(1).forEach(function(row) {
-    if (row[1] === lineUserId && row[3] === yearMonth) fileUrl = row[6];
+    if (row[1] === lineUserId && normalizeYearMonth_(row[3]) === yearMonth) fileUrl = row[6];
   });
 
   return jsonResponse({
@@ -195,9 +195,9 @@ function handleAdminConfirmMonth_(payload) {
   var workingDays  = 0;
   var totalMinutes = 0;
   ocrData.slice(1).forEach(function(row) {
-    if (row[0] !== lineUserId || row[2] !== yearMonth) return;
-    var startStr = row[10] || row[4];
-    var endStr   = row[11] || row[5];
+    if (row[0] !== lineUserId || normalizeYearMonth_(row[2]) !== yearMonth) return;
+    var startStr = normalizeTime_(row[10]) || normalizeTime_(row[4]);
+    var endStr   = normalizeTime_(row[11]) || normalizeTime_(row[5]);
     if (!startStr) return;
     workingDays++;
     var s = timeToMinutes_(startStr);
@@ -212,7 +212,7 @@ function handleAdminConfirmMonth_(payload) {
   var monthData  = monthSheet.getDataRange().getValues();
   var targetRow  = -1;
   for (var i = 1; i < monthData.length; i++) {
-    if (monthData[i][0] === lineUserId && monthData[i][2] === yearMonth) {
+    if (monthData[i][0] === lineUserId && normalizeYearMonth_(monthData[i][2]) === yearMonth) {
       targetRow = i + 1; break;
     }
   }
@@ -230,7 +230,7 @@ function handleAdminConfirmMonth_(payload) {
   var recvSheet = ss.getSheetByName(SHEET_RECEIVED);
   var recvData  = recvSheet.getDataRange().getValues();
   for (var j = 1; j < recvData.length; j++) {
-    if (recvData[j][1] === lineUserId && recvData[j][3] === yearMonth) {
+    if (recvData[j][1] === lineUserId && normalizeYearMonth_(recvData[j][3]) === yearMonth) {
       recvSheet.getRange(j + 1, 8).setValue('確定');
     }
   }
@@ -252,7 +252,7 @@ function handleAdminExportData_(payload) {
   });
 
   var rows = monthlyData.slice(1)
-    .filter(function(row) { return row[2] === yearMonth; })
+    .filter(function(row) { return normalizeYearMonth_(row[2]) === yearMonth; })
     .map(function(row) {
       return {
         driverName:    row[1],
@@ -271,6 +271,28 @@ function handleAdminExportData_(payload) {
 }
 
 // ===== ユーティリティ =====
+
+// Sheets が "2026-05" を Date 型に変換することがあるため、どちらでも "YYYY-MM" 文字列に正規化する
+function normalizeYearMonth_(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy-MM');
+  }
+  return String(val).trim();
+}
+
+// Sheets が "08:00" を時刻型（1899-12-30ベースのDate）で返すことがあるため "HH:mm" に正規化する
+function normalizeTime_(val) {
+  if (val === null || val === undefined || val === '') return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'Asia/Tokyo', 'HH:mm');
+  }
+  var str = String(val).trim();
+  if (str.indexOf('T') !== -1) {
+    try { return Utilities.formatDate(new Date(str), 'Asia/Tokyo', 'HH:mm'); } catch(e) {}
+  }
+  return str;
+}
 
 function timeToMinutes_(timeStr) {
   if (!timeStr) return null;
