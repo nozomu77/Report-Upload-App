@@ -28,6 +28,13 @@ function doPost(e) {
       case 'getProfile':    return handleGetProfile(payload);
       case 'uploadReport':  return handleUploadReport(payload);
       case 'getMyReports':  return handleGetMyReports(payload);
+      case 'adminGetOverview':
+      case 'adminGetDriverList':
+      case 'adminGetOcrDetail':
+      case 'adminSaveCorrection':
+      case 'adminConfirmMonth':
+      case 'adminExportData':
+        return handleAdminPost(payload);
       default:
         return jsonResponse({ error: 'invalid action' });
     }
