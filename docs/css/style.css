@@ -1,0 +1,255 @@
+/* ===== リセット & ベース ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #111111;
+  --surface:   #1c1c1e;
+  --surface2:  #2c2c2e;
+  --border:    #3a3a3c;
+  --text:      #f2f2f7;
+  --text-sub:  #8e8e93;
+  --accent:    #0a84ff;
+  --success:   #30d158;
+  --danger:    #ff453a;
+  --radius:    12px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ===== 画面切り替え ===== */
+.screen { display: none; }
+.screen.active { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ===== ローディング ===== */
+#screen-loading {
+  align-items: center;
+  justify-content: center;
+}
+.loading-inner {
+  text-align: center;
+  color: var(--text-sub);
+}
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== ヘッダー ===== */
+.app-header {
+  background: var(--surface);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.app-header h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+.driver-info {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+
+/* ===== コンテナ・カード ===== */
+.container {
+  padding: 16px;
+}
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+/* ===== 年月入力 ===== */
+.input-month {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 18px;
+  padding: 12px 16px;
+  outline: none;
+}
+.input-month:focus { border-color: var(--accent); }
+
+/* ===== アップロードエリア ===== */
+.upload-area {
+  text-align: center;
+}
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.upload-label {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.upload-sub {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-bottom: 20px;
+}
+.file-input-hidden { display: none; }
+
+.upload-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* ===== プレビューエリア ===== */
+.preview-area {
+  text-align: center;
+}
+.preview-label {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-bottom: 12px;
+}
+.preview-image {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  object-fit: contain;
+}
+.preview-filename {
+  font-size: 14px;
+  color: var(--text-sub);
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
+/* ===== ボタン ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 20px;
+  transition: opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { opacity: 0.7; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-camera  { background: var(--surface2); color: var(--text); flex: 1; }
+.btn-file    { background: var(--surface2); color: var(--text); flex: 1; }
+.btn-cancel  { background: transparent; color: var(--danger); font-size: 14px; padding: 8px 16px; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-submit  {
+  width: calc(100% - 32px);
+  margin: 0 16px 24px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  padding: 16px;
+  border-radius: var(--radius);
+}
+
+/* ===== 提出履歴 ===== */
+.report-list { }
+.report-item {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.report-item-left .yearmonth { font-weight: 600; }
+.report-item-left .filetype  { font-size: 13px; color: var(--text-sub); }
+.status-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 100px;
+}
+.status-未処理  { background: var(--surface2); color: var(--text-sub); }
+.status-OCR中   { background: #2c2c2e; color: var(--accent); }
+.status-確認待ち { background: rgba(255,204,0,0.15); color: #ffd60a; }
+.status-確定    { background: rgba(48,209,88,0.15); color: var(--success); }
+.status-OCRエラー { background: rgba(255,69,58,0.15); color: var(--danger); }
+
+.empty-text { color: var(--text-sub); font-size: 14px; text-align: center; padding: 24px 0; }
+
+/* ===== オーバーレイ ===== */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.overlay.hidden { display: none; }
+.overlay-inner { text-align: center; color: var(--text); }
+.overlay-inner .spinner { margin-bottom: 16px; }
+
+/* ===== 完了画面 ===== */
+#screen-done {
+  align-items: center;
+  justify-content: center;
+}
+.done-inner {
+  text-align: center;
+  padding: 40px 24px;
+}
+.done-icon {
+  font-size: 72px;
+  margin-bottom: 24px;
+}
+.done-inner h2 {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+.done-inner p {
+  color: var(--text-sub);
+  margin-bottom: 32px;
+}
+
+/* ===== トースト ===== */
+.toast {
+  position: fixed;
+  bottom: 32px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px 24px;
+  border-radius: 100px;
+  font-size: 14px;
+  z-index: 200;
+  white-space: nowrap;
+}
+.toast.hidden { display: none; }
+
+/* ===== ユーティリティ ===== */
+.hidden { display: none !important; }

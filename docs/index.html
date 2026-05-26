@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>月報アップロード | コウショウ物流</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+
+  <!-- ローディング画面 -->
+  <div id="screen-loading" class="screen active">
+    <div class="loading-inner">
+      <div class="spinner"></div>
+      <p>読み込み中...</p>
+    </div>
+  </div>
+
+  <!-- メイン画面: 月報アップロード -->
+  <div id="screen-main" class="screen">
+    <header class="app-header">
+      <h1>月報アップロード</h1>
+      <p id="driver-info" class="driver-info">-</p>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h2 class="section-title">対象年月を選択</h2>
+        <input type="month" id="input-yearmonth" class="input-month">
+      </section>
+
+      <section class="card upload-area" id="upload-area">
+        <div class="upload-icon">📷</div>
+        <p class="upload-label">月報を撮影またはPDFを選択</p>
+        <p class="upload-sub">写真（JPG/PNG）またはPDFに対応</p>
+        <input type="file" id="file-input" accept="image/*,application/pdf" class="file-input-hidden">
+        <div class="upload-buttons">
+          <button class="btn btn-camera" id="btn-camera">📷 撮影</button>
+          <button class="btn btn-file"   id="btn-file">📄 ファイル選択</button>
+        </div>
+      </section>
+
+      <section class="card preview-area hidden" id="preview-area">
+        <p class="preview-label">選択したファイル</p>
+        <img id="preview-image" class="preview-image hidden" alt="プレビュー">
+        <p id="preview-filename" class="preview-filename"></p>
+        <button class="btn btn-cancel" id="btn-cancel-file">✕ 選択し直す</button>
+      </section>
+
+      <button class="btn btn-submit" id="btn-submit" disabled>この月報を送信する</button>
+    </main>
+
+    <!-- 提出済み一覧 -->
+    <section class="container">
+      <h2 class="section-title">提出履歴</h2>
+      <div id="report-list" class="report-list">
+        <p class="empty-text">提出済みの月報はありません</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- 送信中オーバーレイ -->
+  <div id="overlay-uploading" class="overlay hidden">
+    <div class="overlay-inner">
+      <div class="spinner"></div>
+      <p>送信中...</p>
+    </div>
+  </div>
+
+  <!-- 完了画面 -->
+  <div id="screen-done" class="screen">
+    <div class="done-inner">
+      <div class="done-icon">✅</div>
+      <h2>送信完了</h2>
+      <p id="done-message"></p>
+      <button class="btn btn-primary" id="btn-back">戻る</button>
+    </div>
+  </div>
+
+  <!-- エラートースト -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
