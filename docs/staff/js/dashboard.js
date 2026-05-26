@@ -183,6 +183,7 @@ function renderOcrTable(days, driver) {
     });
   });
 
+  document.getElementById('ocr-unit-price').textContent = '¥' + unitPrice.toLocaleString();
   updateOcrSummary(unitPrice);
   document.getElementById('btn-confirm-month').disabled = false;
 }
