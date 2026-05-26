@@ -1,6 +1,6 @@
 // ===== 設定（後で実際の値に差し替え） =====
 var LIFF_ID = '2010200152-mmBc5K3D';
-var GAS_URL = 'https://script.google.com/macros/s/AKfycbyyow5Qw2WLtxUmpRf1rclpAzS9c7E31b5yOrP1qzyDFz55vkRsxZWuVhNRSHBGpd9Q/exec';
+var GAS_URL = 'https://script.google.com/macros/s/AKfycby2iYCqY-8ewAC0uMITrhjxNqe_toZEXLySC6dQNvuA371a8pX41d6Xxn3N1ayHW_W5/exec';
 
 // ===== 状態 =====
 var state = {
