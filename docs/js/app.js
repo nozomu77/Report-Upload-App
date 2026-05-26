@@ -1,6 +1,6 @@
 // ===== 設定（後で実際の値に差し替え） =====
-var LIFF_ID  = 'YOUR_LIFF_ID_HERE';
-var GAS_URL  = 'YOUR_GAS_WEBAPP_URL_HERE'; // /exec URL
+var LIFF_ID = '2010200152-mmBc5K3D';
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbyyow5Qw2WLtxUmpRf1rclpAzS9c7E31b5yOrP1qzyDFz55vkRsxZWuVhNRSHBGpd9Q/exec';
 
 // ===== 状態 =====
 var state = {
@@ -8,7 +8,7 @@ var state = {
   displayName: null,
   driver:      null,
   selectedFile: null,
-  selectedFileType: null, // 'image' or 'pdf'
+  selectedMimeType: null,
 };
 
 // ===== 初期化 =====
@@ -17,8 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initApp() {
-  // 年月のデフォルトを当月に設定
-  var now = new Date();
+  var now  = new Date();
   var yyyy = now.getFullYear();
   var mm   = String(now.getMonth() + 1).padStart(2, '0');
   document.getElementById('input-yearmonth').value = yyyy + '-' + mm;
@@ -27,60 +26,43 @@ function initApp() {
     .then(function() {
       if (!liff.isLoggedIn()) {
         liff.login();
-        return;
+        return Promise.reject('not_logged_in');
       }
       return liff.getProfile();
     })
     .then(function(profile) {
-      if (!profile) return;
       state.lineUserId  = profile.userId;
       state.displayName = profile.displayName;
-      return fetchDriverProfile(profile.userId);
+      // プロフィール＋履歴を1回のAPIで取得
+      return gasPost({ action: 'bootstrap', lineUserId: profile.userId });
     })
-    .then(function() {
-      showScreen('main');
-      loadReportHistory();
+    .then(function(res) {
+      state.driver = res.driver;
+      updateDriverInfo(res.driver);
+      renderReportList(res.reports || []);
       setupEventListeners();
+      showScreen('main');
     })
     .catch(function(err) {
-      showToast('初期化に失敗しました: ' + err.message);
-      // 開発時はここでmain画面に進めることもある
+      if (err === 'not_logged_in') return;
+      showScreen('main');
+      showToast('認証に失敗しました。マスタ登録を確認してください。');
+      setupEventListeners();
     });
 }
 
 // ===== API呼び出し =====
 
-function fetchDriverProfile(lineUserId) {
-  return gasPost({ action: 'getMyReports', lineUserId: lineUserId })
-    .then(function(res) {
-      // ドライバー名はgetMyReportsのレスポンスから取れないので
-      // ここではLINE表示名で代替し、マスタ登録チェックのみ行う
-      // TODO: getProfileエンドポイントをCode.gsに追加したら差し替える
-      updateDriverInfo(state.displayName, '');
-    });
-}
-
-function loadReportHistory() {
-  gasPost({ action: 'getMyReports', lineUserId: state.lineUserId })
-    .then(function(res) {
-      renderReportList(res.reports || []);
-    })
-    .catch(function() {
-      renderReportList([]);
-    });
-}
-
 function uploadReport(yearMonth, file) {
   return new Promise(function(resolve, reject) {
     var reader = new FileReader();
     reader.onload = function(e) {
-      var base64 = e.target.result.split(',')[1]; // data:...;base64,<ここ>
-      var fileType = file.type.indexOf('pdf') >= 0 ? 'pdf' : 'image';
+      var base64 = e.target.result.split(',')[1];
       gasPost({
         action:      'uploadReport',
         lineUserId:  state.lineUserId,
         yearMonth:   yearMonth,
-        fileType:    fileType,
+        mimeType:    file.type || 'image/jpeg',
         fileBase64:  base64,
         fileName:    file.name,
       }).then(resolve).catch(reject);
@@ -92,13 +74,14 @@ function uploadReport(yearMonth, file) {
 
 function gasPost(payload) {
   return fetch(GAS_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'text/plain' }, // GASはapplication/jsonだとCORSプリフライトが発生する
-    body:    JSON.stringify(payload),
+    method:   'POST',
+    // GASはapplication/jsonだとCORSプリフライトが発生するためtext/plainで送る
+    headers:  { 'Content-Type': 'text/plain' },
+    body:     JSON.stringify(payload),
     redirect: 'follow',
-  }).then(function(res) {
-    return res.json();
-  }).then(function(json) {
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
     if (json.error) throw new Error(json.error);
     return json;
   });
@@ -107,7 +90,6 @@ function gasPost(payload) {
 // ===== イベントリスナー =====
 
 function setupEventListeners() {
-  // カメラボタン（capture='environment'で背面カメラ優先）
   document.getElementById('btn-camera').addEventListener('click', function() {
     var input = document.getElementById('file-input');
     input.setAttribute('capture', 'environment');
@@ -115,7 +97,6 @@ function setupEventListeners() {
     input.click();
   });
 
-  // ファイル選択ボタン
   document.getElementById('btn-file').addEventListener('click', function() {
     var input = document.getElementById('file-input');
     input.removeAttribute('capture');
@@ -123,47 +104,37 @@ function setupEventListeners() {
     input.click();
   });
 
-  // ファイル選択時
   document.getElementById('file-input').addEventListener('change', function(e) {
     var file = e.target.files[0];
-    if (!file) return;
-    handleFileSelected(file);
+    if (file) handleFileSelected(file);
   });
 
-  // 選択し直す
-  document.getElementById('btn-cancel-file').addEventListener('click', function() {
-    clearFileSelection();
-  });
-
-  // 送信ボタン
-  document.getElementById('btn-submit').addEventListener('click', function() {
-    handleSubmit();
-  });
-
-  // 完了→戻るボタン
+  document.getElementById('btn-cancel-file').addEventListener('click', clearFileSelection);
+  document.getElementById('btn-submit').addEventListener('click', handleSubmit);
   document.getElementById('btn-back').addEventListener('click', function() {
     showScreen('main');
-    loadReportHistory();
+    gasPost({ action: 'getMyReports', lineUserId: state.lineUserId })
+      .then(function(res) { renderReportList(res.reports || []); })
+      .catch(function() {});
   });
 }
 
-// ===== ファイル選択処理 =====
+// ===== ファイル選択 =====
 
 function handleFileSelected(file) {
   state.selectedFile     = file;
-  state.selectedFileType = file.type.indexOf('pdf') >= 0 ? 'pdf' : 'image';
+  state.selectedMimeType = file.type;
 
   document.getElementById('upload-area').classList.add('hidden');
   document.getElementById('preview-area').classList.remove('hidden');
   document.getElementById('preview-filename').textContent = file.name;
 
-  if (state.selectedFileType === 'image') {
-    var url = URL.createObjectURL(file);
-    var img = document.getElementById('preview-image');
-    img.src = url;
+  var img = document.getElementById('preview-image');
+  if (file.type.startsWith('image/')) {
+    img.src = URL.createObjectURL(file);
     img.classList.remove('hidden');
   } else {
-    document.getElementById('preview-image').classList.add('hidden');
+    img.classList.add('hidden');
   }
 
   document.getElementById('btn-submit').disabled = false;
@@ -171,7 +142,7 @@ function handleFileSelected(file) {
 
 function clearFileSelection() {
   state.selectedFile     = null;
-  state.selectedFileType = null;
+  state.selectedMimeType = null;
   document.getElementById('file-input').value = '';
   document.getElementById('upload-area').classList.remove('hidden');
   document.getElementById('preview-area').classList.add('hidden');
@@ -179,18 +150,13 @@ function clearFileSelection() {
   document.getElementById('btn-submit').disabled = true;
 }
 
-// ===== 送信処理 =====
+// ===== 送信 =====
 
 function handleSubmit() {
   var yearMonth = document.getElementById('input-yearmonth').value;
-  if (!yearMonth) {
-    showToast('対象年月を選択してください');
-    return;
-  }
-  if (!state.selectedFile) {
-    showToast('ファイルを選択してください');
-    return;
-  }
+  if (!yearMonth)          { showToast('対象年月を選択してください'); return; }
+  if (!state.selectedFile) { showToast('ファイルを選択してください'); return; }
+  if (!state.lineUserId)   { showToast('ログインし直してください'); return; }
 
   showOverlay(true);
 
@@ -203,11 +169,11 @@ function handleSubmit() {
     })
     .catch(function(err) {
       showOverlay(false);
-      showToast('送信に失敗しました: ' + err.message);
+      showToast('送信失敗: ' + err.message);
     });
 }
 
-// ===== 提出履歴レンダリング =====
+// ===== 提出履歴 =====
 
 function renderReportList(reports) {
   var container = document.getElementById('report-list');
@@ -219,15 +185,14 @@ function renderReportList(reports) {
   reports.sort(function(a, b) { return b.yearMonth.localeCompare(a.yearMonth); });
 
   container.innerHTML = reports.map(function(r) {
-    var statusClass = 'status-' + r.status;
-    var fileLabel   = r.fileType === 'pdf' ? 'PDF' : '写真';
+    var fileLabel = r.fileType === 'pdf' ? 'PDF' : '写真';
     return [
       '<div class="report-item">',
       '  <div class="report-item-left">',
       '    <div class="yearmonth">' + r.yearMonth + '</div>',
       '    <div class="filetype">' + fileLabel + '</div>',
       '  </div>',
-      '  <span class="status-badge ' + statusClass + '">' + r.status + '</span>',
+      '  <span class="status-badge status-' + r.status + '">' + r.status + '</span>',
       '</div>',
     ].join('');
   }).join('');
@@ -242,9 +207,8 @@ function showScreen(name) {
   document.getElementById('screen-' + name).classList.add('active');
 }
 
-function updateDriverInfo(name, site) {
-  var text = name || '---';
-  if (site) text += ' / ' + site;
+function updateDriverInfo(driver) {
+  var text = driver ? (driver.name + ' / ' + driver.site) : state.displayName || '---';
   document.getElementById('driver-info').textContent = text;
 }
 
@@ -258,8 +222,6 @@ function showToast(msg) {
   var el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.remove('hidden');
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() {
-    el.classList.add('hidden');
-  }, 3000);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { el.classList.add('hidden'); }, 3000);
 }
