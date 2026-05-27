@@ -144,11 +144,14 @@ function handleAdminGetOcrDetail_(payload) {
     if (row[1] === lineUserId && normalizeYearMonth_(row[3]) === yearMonth) fileUrl = row[6];
   });
 
+  var hasNote = days.some(function(d) { return d.noteFlag === true || d.noteFlag === 'TRUE'; });
+
   return jsonResponse({
-    days:     days,
-    fileUrl:  fileUrl,
-    driver:   getDriverByUserId(lineUserId) || {},
+    days:      days,
+    fileUrl:   fileUrl,
+    driver:    getDriverByUserId(lineUserId) || {},
     yearMonth: yearMonth,
+    hasNote:   hasNote,
   });
 }
 
@@ -178,6 +181,7 @@ function handleAdminSaveCorrection_(payload) {
     sheet.getRange(i + 1, 12).setValue(c.fixedEnd);   // 修正後終了時間
   }
 
+  SpreadsheetApp.flush();
   return jsonResponse({ status: 'ok' });
 }
 

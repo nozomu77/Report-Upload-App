@@ -8,11 +8,12 @@ var OCR_PROMPT_BASE = [
   'これはドライバーの月次稼働報告書の画像です。',
   '日付ごとの「開始時間」と「終了時間」を読み取り、以下のJSON形式のみで返してください。',
   '',
-  '{"days":[{"day":1,"start":"08:00","end":"17:30"},{"day":2,"start":null,"end":null},...]}',
+  '{"hasNote":false,"days":[{"day":1,"start":"08:00","end":"17:30"},{"day":2,"start":null,"end":null},...]}',
   '',
   '【ルール】',
   '- day: 帳票に書かれた日付の数字をそのまま読む（1〜31の整数）',
   '- start/end: HH:MM形式。開始時間が記入されていない日はnull',
+  '- hasNote: 備考・メモ・申し送り欄に何らか記載があればtrue、なければfalse',
   '- 合計行・集計欄は無視する',
   '- JSONブロックのみを返し説明文は不要',
 ].join('\n');
@@ -28,20 +29,26 @@ function runOcr(fileId, yearMonth, lineUserId, firstBase64, secondBase64, pdfBas
 
   try {
     var days;
+    var hasNote = false;
 
     if (pdfBase64) {
-      var raw = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
-      days = parseDays_(raw);
+      var raw    = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
+      var result = parseOcrResult_(raw);
+      days    = result.days;
+      hasNote = result.hasNote;
     } else {
       // 前半・後半に分けて送信（日付範囲は指定しない：モデルが実際の数字を読む）
       var promptFirst  = OCR_PROMPT_BASE + '\n\n【補足】これは月報の前半部分の画像です。';
       var promptSecond = OCR_PROMPT_BASE + '\n\n【補足】これは月報の後半部分の画像です。';
       var firstRaw  = callClaudeApi_(firstBase64,  'image/jpeg', promptFirst);
       var secondRaw = callClaudeApi_(secondBase64, 'image/jpeg', promptSecond);
-      days = mergeHalves_(parseDays_(firstRaw), parseDays_(secondRaw));
+      var firstResult  = parseOcrResult_(firstRaw);
+      var secondResult = parseOcrResult_(secondRaw);
+      days    = mergeHalves_(firstResult.days, secondResult.days);
+      hasNote = firstResult.hasNote || secondResult.hasNote;
     }
 
-    writeOcrResults_(lineUserId, driver.name, yearMonth, fileId, days);
+    writeOcrResults_(lineUserId, driver.name, yearMonth, fileId, days, hasNote);
     updateReceivedFileStatus_(fileId, '確認待ち');
     updateReceivedOcrTime_(fileId);
 
@@ -91,11 +98,11 @@ function callClaudeApi_(base64, mimeType, prompt) {
 
 // ===== パース・マージ =====
 
-function parseDays_(text) {
+function parseOcrResult_(text) {
   var match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('OCRレスポンスからJSONを取得できませんでした: ' + text.substring(0, 200));
   var parsed = JSON.parse(match[0]);
-  return parsed.days || [];
+  return { days: parsed.days || [], hasNote: !!parsed.hasNote };
 }
 
 function mergeHalves_(leftDays, rightDays) {
@@ -122,7 +129,7 @@ function countWorkingDays_(days) {
 
 // ===== Sheets書き込み =====
 
-function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days) {
+function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days, hasNote) {
   var ss    = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_OCR);
 
@@ -136,6 +143,7 @@ function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days) {
 
   if (days.length === 0) return;
 
+  var noteVal = !!hasNote;
   var rows = days.map(function(d) {
     return [
       lineUserId,        // LINEユーザーID
@@ -146,7 +154,7 @@ function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days) {
       d.end   || '',     // 終了時間
       d.start !== null,  // 稼働フラグ
       false,             // 立替経費フラグ（列は維持・未使用）
-      false,             // 備考フラグ（列は維持・月レベルで別管理）
+      noteVal,           // 備考フラグ（月レベル、全行に同じ値）
       '未確認',           // 確認ステータス
       '',                // 修正後開始時間
       '',                // 修正後終了時間

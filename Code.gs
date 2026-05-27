@@ -154,7 +154,7 @@ function getReportsByUserId_(lineUserId) {
     if (data[i][1] === lineUserId) {
       reports.push({
         timestamp: data[i][0] ? new Date(data[i][0]).toISOString() : '',
-        yearMonth: data[i][3],
+        yearMonth: normalizeYearMonth_(data[i][3]),
         fileType:  data[i][4],
         fileUrl:   data[i][6],
         status:    data[i][7]

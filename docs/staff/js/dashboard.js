@@ -81,6 +81,9 @@ function handleLogin() {
 function loadDashboard() {
   var ym = state.yearMonth;
 
+  document.getElementById('driver-tbody').innerHTML =
+    '<tr><td colspan="7" class="empty-cell">読み込み中...</td></tr>';
+
   adminPost({ action: 'adminGetOverview', adminToken: state.token, yearMonth: ym })
     .then(function(res) {
       document.getElementById('stat-total').textContent     = res.stats.total;
@@ -143,6 +146,7 @@ function openOcrScreen(lineUserId, driverName) {
     yearMonth:   state.yearMonth,
   }).then(function(res) {
     document.getElementById('ocr-file-link').href = res.fileUrl || '#';
+    document.getElementById('ocr-note-badge').classList.toggle('hidden', !res.hasNote);
     renderOcrTable(res.days, res.driver);
     showScreen('ocr');
   });
