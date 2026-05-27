@@ -39,12 +39,12 @@ function runOcr(fileId, yearMonth, lineUserId, leftBase64, rightBase64, pdfBase6
     var days;
 
     if (pdfBase64) {
-      var raw  = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
+      var raw = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
       days = parseDays_(raw);
     } else {
-      var leftRaw  = callClaudeApi_(leftBase64,  'image/jpeg', OCR_PROMPT_BASE + '\n（これは月報の左半分です）');
-      var rightRaw = callClaudeApi_(rightBase64, 'image/jpeg', OCR_PROMPT_BASE + '\n（これは月報の右半分です）');
-      days = mergeHalves_(parseDays_(leftRaw), parseDays_(rightRaw));
+      // フル画像で送信（左右分割は帳票の向きに依存するため一旦無効化）
+      var fullRaw = callClaudeApi_(leftBase64 || rightBase64, 'image/jpeg', OCR_PROMPT_BASE);
+      days = parseDays_(fullRaw);
     }
 
     writeOcrResults_(lineUserId, driver.name, yearMonth, fileId, days);
