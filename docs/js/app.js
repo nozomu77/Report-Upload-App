@@ -255,12 +255,21 @@ function renderReportList(reports) {
   reports.sort(function(a, b) { return b.yearMonth.localeCompare(a.yearMonth); });
 
   container.innerHTML = reports.map(function(r) {
-    var fileLabel = r.fileType === 'pdf' ? 'PDF' : '写真';
+    var fileLabel  = r.fileType === 'pdf' ? 'PDF' : '写真';
+    var ymParts    = (r.yearMonth || '').split('-');
+    var ymLabel    = ymParts.length === 2
+      ? ymParts[0] + '年' + parseInt(ymParts[1], 10) + '月分'
+      : r.yearMonth;
+    var submitDate = '';
+    if (r.timestamp) {
+      var d = new Date(r.timestamp);
+      submitDate = (d.getMonth() + 1) + '/' + d.getDate() + ' 提出 · ';
+    }
     return [
       '<div class="report-item">',
       '  <div class="report-item-left">',
-      '    <div class="yearmonth">' + r.yearMonth + '</div>',
-      '    <div class="filetype">' + fileLabel + '</div>',
+      '    <div class="yearmonth">' + ymLabel + '</div>',
+      '    <div class="filetype">' + submitDate + fileLabel + '</div>',
       '  </div>',
       '  <span class="status-badge status-' + r.status + '">' + r.status + '</span>',
       '</div>',
