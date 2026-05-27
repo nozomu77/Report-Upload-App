@@ -104,7 +104,7 @@ function renderDriverTable(drivers) {
   tbody.innerHTML = drivers.map(function(d) {
     var badgeClass  = 'badge-' + d.status;
     var billingText = d.billingAmount ? '¥' + d.billingAmount.toLocaleString() : '-';
-    var ocrTime     = d.ocrTime ? d.ocrTime.replace('T', ' ').substring(0, 16) : '-';
+    var ocrTime     = d.ocrTime || '-';
     var btnLabel    = d.isConfirmed ? '確認済み' : '確認する';
     var btnDisabled = d.status !== '確認待ち' && d.status !== '確定' ? 'disabled' : '';
     return [
@@ -156,11 +156,9 @@ function renderOcrTable(days, driver) {
     var displayStart = d.fixedStart || d.start || '';
     var displayEnd   = d.fixedEnd   || d.end   || '';
     var isWorking    = displayStart !== '';
-    var dotClass     = isWorking ? 'yes' : 'no';
+    var dotClass      = isWorking ? 'yes' : 'no';
     var startModified = d.fixedStart ? ' modified' : '';
     var endModified   = d.fixedEnd   ? ' modified' : '';
-    var expenseHtml  = d.expenseFlag ? '<span class="flag-badge expense" title="立替経費あり">￥</span>' : '';
-    var noteHtml     = d.noteFlag    ? '<span class="flag-badge note"    title="備考あり">📝</span>'    : '';
     return [
       '<tr>',
       '<td style="font-weight:600;color:var(--text-sub)">' + d.day + '</td>',
@@ -169,8 +167,6 @@ function renderOcrTable(days, driver) {
       '<td><input type="text" class="time-input' + endModified   + '" data-day="' + d.day + '" data-field="end"' +
           ' value="' + displayEnd + '" placeholder="--:--"></td>',
       '<td><span class="working-dot ' + dotClass + '"></span></td>',
-      '<td>' + expenseHtml + '</td>',
-      '<td>' + noteHtml + '</td>',
       '</tr>',
     ].join('');
   }).join('');

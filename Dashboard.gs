@@ -68,7 +68,7 @@ function handleAdminGetDriverList_(payload) {
         fileUrl:   row[6],
         fileType:  row[4],
         status:    row[7],
-        ocrTime:   row[8] ? new Date(row[8]).toISOString() : '',
+        ocrTime:   row[8] ? Utilities.formatDate(new Date(row[8]), 'Asia/Tokyo', 'MM/dd HH:mm') : '',
       };
     }
   });

@@ -111,20 +111,24 @@ function splitForOcr(file) {
       var c1 = document.createElement('canvas');
       var c2 = document.createElement('canvas');
 
+      // 境界付近の行が欠落しないよう25%重複させて分割する
+      // 前半: 0〜65%、後半: 35〜100%
       if (w > h) {
-        // 横長: 左右分割（横長帳票で左右にページが分かれている場合）
-        var midX = Math.round(w / 2);
-        c1.width = midX; c1.height = h;
-        c1.getContext('2d').drawImage(canvas, 0, 0, midX, h, 0, 0, midX, h);
-        c2.width = w - midX; c2.height = h;
-        c2.getContext('2d').drawImage(canvas, midX, 0, w - midX, h, 0, 0, w - midX, h);
+        // 横長: 左右分割
+        var cut1 = Math.round(w * 0.65);
+        var cut2 = Math.round(w * 0.35);
+        c1.width = cut1; c1.height = h;
+        c1.getContext('2d').drawImage(canvas, 0, 0, cut1, h, 0, 0, cut1, h);
+        c2.width = w - cut2; c2.height = h;
+        c2.getContext('2d').drawImage(canvas, cut2, 0, w - cut2, h, 0, 0, w - cut2, h);
       } else {
-        // 縦長: 上下分割（A4縦などで1〜31日が縦に並ぶ場合）
-        var midY = Math.round(h / 2);
-        c1.width = w; c1.height = midY;
-        c1.getContext('2d').drawImage(canvas, 0, 0, w, midY, 0, 0, w, midY);
-        c2.width = w; c2.height = h - midY;
-        c2.getContext('2d').drawImage(canvas, 0, midY, w, h - midY, 0, 0, w, h - midY);
+        // 縦長: 上下分割
+        var cut1 = Math.round(h * 0.65);
+        var cut2 = Math.round(h * 0.35);
+        c1.width = w; c1.height = cut1;
+        c1.getContext('2d').drawImage(canvas, 0, 0, w, cut1, 0, 0, w, cut1);
+        c2.width = w; c2.height = h - cut2;
+        c2.getContext('2d').drawImage(canvas, 0, cut2, w, h - cut2, 0, 0, w, h - cut2);
       }
 
       resolve({

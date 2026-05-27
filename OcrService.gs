@@ -6,23 +6,14 @@ var CLAUDE_MODEL   = 'claude-sonnet-4-6';
 
 var OCR_PROMPT_BASE = [
   'これはドライバーの月次稼働報告書の画像です。',
-  '日付ごとのデータを読み取り、以下のJSON形式のみで返してください。',
+  '日付ごとの「開始時間」と「終了時間」を読み取り、以下のJSON形式のみで返してください。',
   '',
-  '{"days":[',
-  '  {"day":1,"start":"08:00","end":"17:30","expense":false,"note":false},',
-  '  {"day":2,"start":null,"end":null,"expense":false,"note":false},',
-  '  ...',
-  ']}',
+  '{"days":[{"day":1,"start":"08:00","end":"17:30"},{"day":2,"start":null,"end":null},...]}',
   '',
-  '【各フィールドのルール】',
-  '- day: 日付の数字（1〜31の整数）',
+  '【ルール】',
+  '- day: 帳票に書かれた日付の数字をそのまま読む（1〜31の整数）',
   '- start/end: HH:MM形式。開始時間が記入されていない日はnull',
-  '- expense: その日の行に立替経費・費用の記入があればtrue',
-  '- note: その日の行に申し送り・備考の記入（塗りつぶしや文字）があればtrue',
-  '',
-  '【共通ルール】',
   '- 合計行・集計欄は無視する',
-  '- サマリ値は使わず日別データだけを返す',
   '- JSONブロックのみを返し説明文は不要',
 ].join('\n');
 
@@ -42,9 +33,9 @@ function runOcr(fileId, yearMonth, lineUserId, firstBase64, secondBase64, pdfBas
       var raw = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
       days = parseDays_(raw);
     } else {
-      // 前半（1〜16日ごろ）と後半（16〜31日ごろ）に分けて送信
-      var promptFirst  = OCR_PROMPT_BASE + '\n\n【補足】これは月報の前半部分です。おおむね1〜16日ごろのデータが含まれます。';
-      var promptSecond = OCR_PROMPT_BASE + '\n\n【補足】これは月報の後半部分です。おおむね16〜31日ごろのデータが含まれます。';
+      // 前半・後半に分けて送信（日付範囲は指定しない：モデルが実際の数字を読む）
+      var promptFirst  = OCR_PROMPT_BASE + '\n\n【補足】これは月報の前半部分の画像です。';
+      var promptSecond = OCR_PROMPT_BASE + '\n\n【補足】これは月報の後半部分の画像です。';
       var firstRaw  = callClaudeApi_(firstBase64,  'image/jpeg', promptFirst);
       var secondRaw = callClaudeApi_(secondBase64, 'image/jpeg', promptSecond);
       days = mergeHalves_(parseDays_(firstRaw), parseDays_(secondRaw));
@@ -147,19 +138,19 @@ function writeOcrResults_(lineUserId, driverName, yearMonth, fileId, days) {
 
   var rows = days.map(function(d) {
     return [
-      lineUserId,            // LINEユーザーID
-      driverName,            // ドライバー名
-      yearMonth,             // 年月
-      d.day,                 // 日
-      d.start || '',         // 開始時間
-      d.end   || '',         // 終了時間
-      d.start !== null,      // 稼働フラグ
-      d.expense === true,    // 立替経費フラグ
-      d.note    === true,    // 備考フラグ
-      '未確認',               // 確認ステータス
-      '',                    // 修正後開始時間
-      '',                    // 修正後終了時間
-      fileId                 // 受信ファイルID
+      lineUserId,        // LINEユーザーID
+      driverName,        // ドライバー名
+      yearMonth,         // 年月
+      d.day,             // 日
+      d.start || '',     // 開始時間
+      d.end   || '',     // 終了時間
+      d.start !== null,  // 稼働フラグ
+      false,             // 立替経費フラグ（列は維持・未使用）
+      false,             // 備考フラグ（列は維持・月レベルで別管理）
+      '未確認',           // 確認ステータス
+      '',                // 修正後開始時間
+      '',                // 修正後終了時間
+      fileId             // 受信ファイルID
     ];
   });
 
