@@ -75,34 +75,63 @@ function uploadReport(yearMonth, file) {
     });
   }
 
-  // 画像: リサイズしてフル画像で送信
-  return resizeImage(file).then(function(base64) {
+  // 画像: 向きに応じて分割してから送信（縦長→上下、横長→左右）
+  return splitForOcr(file).then(function(halves) {
     return gasPost({
-      action:     'uploadReport',
-      lineUserId: state.lineUserId,
-      yearMonth:  yearMonth,
-      mimeType:   'image/jpeg',
-      fileBase64: base64,
-      fileName:   file.name,
+      action:          'uploadReport',
+      lineUserId:      state.lineUserId,
+      yearMonth:       yearMonth,
+      mimeType:        'image/jpeg',
+      fileBase64:      halves.full,
+      fileBase64First: halves.first,
+      fileBase64Second:halves.second,
+      fileName:        file.name,
     });
   });
 }
 
-// 長辺2000px以内にリサイズしてbase64で返す
-function resizeImage(file) {
+// 画像の向きを判定して分割し、フル + 前半 + 後半 の base64 を返す
+function splitForOcr(file) {
   return new Promise(function(resolve, reject) {
     var img = new Image();
     var url = URL.createObjectURL(file);
     img.onload = function() {
       URL.revokeObjectURL(url);
+
       var MAX   = 2000;
       var scale = Math.min(1, MAX / Math.max(img.width, img.height));
       var w     = Math.round(img.width  * scale);
       var h     = Math.round(img.height * scale);
+
       var canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      var full = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+      var c1 = document.createElement('canvas');
+      var c2 = document.createElement('canvas');
+
+      if (w > h) {
+        // 横長: 左右分割（横長帳票で左右にページが分かれている場合）
+        var midX = Math.round(w / 2);
+        c1.width = midX; c1.height = h;
+        c1.getContext('2d').drawImage(canvas, 0, 0, midX, h, 0, 0, midX, h);
+        c2.width = w - midX; c2.height = h;
+        c2.getContext('2d').drawImage(canvas, midX, 0, w - midX, h, 0, 0, w - midX, h);
+      } else {
+        // 縦長: 上下分割（A4縦などで1〜31日が縦に並ぶ場合）
+        var midY = Math.round(h / 2);
+        c1.width = w; c1.height = midY;
+        c1.getContext('2d').drawImage(canvas, 0, 0, w, midY, 0, 0, w, midY);
+        c2.width = w; c2.height = h - midY;
+        c2.getContext('2d').drawImage(canvas, 0, midY, w, h - midY, 0, 0, w, h - midY);
+      }
+
+      resolve({
+        full:   full,
+        first:  c1.toDataURL('image/jpeg', 0.85).split(',')[1],
+        second: c2.toDataURL('image/jpeg', 0.85).split(',')[1],
+      });
     };
     img.onerror = reject;
     img.src = url;

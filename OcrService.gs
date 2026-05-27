@@ -29,7 +29,7 @@ var OCR_PROMPT_BASE = [
 // ===== メイン関数 =====
 
 // Code.gsのhandleUploadReportから呼ばれる
-function runOcr(fileId, yearMonth, lineUserId, leftBase64, rightBase64, pdfBase64) {
+function runOcr(fileId, yearMonth, lineUserId, firstBase64, secondBase64, pdfBase64) {
   var driver = getDriverByUserId(lineUserId);
   if (!driver) throw new Error('Driver not found: ' + lineUserId);
 
@@ -42,9 +42,12 @@ function runOcr(fileId, yearMonth, lineUserId, leftBase64, rightBase64, pdfBase6
       var raw = callClaudeApi_(pdfBase64, 'application/pdf', OCR_PROMPT_BASE);
       days = parseDays_(raw);
     } else {
-      // フル画像で送信（左右分割は帳票の向きに依存するため一旦無効化）
-      var fullRaw = callClaudeApi_(leftBase64 || rightBase64, 'image/jpeg', OCR_PROMPT_BASE);
-      days = parseDays_(fullRaw);
+      // 前半（1〜16日ごろ）と後半（16〜31日ごろ）に分けて送信
+      var promptFirst  = OCR_PROMPT_BASE + '\n\n【補足】これは月報の前半部分です。おおむね1〜16日ごろのデータが含まれます。';
+      var promptSecond = OCR_PROMPT_BASE + '\n\n【補足】これは月報の後半部分です。おおむね16〜31日ごろのデータが含まれます。';
+      var firstRaw  = callClaudeApi_(firstBase64,  'image/jpeg', promptFirst);
+      var secondRaw = callClaudeApi_(secondBase64, 'image/jpeg', promptSecond);
+      days = mergeHalves_(parseDays_(firstRaw), parseDays_(secondRaw));
     }
 
     writeOcrResults_(lineUserId, driver.name, yearMonth, fileId, days);

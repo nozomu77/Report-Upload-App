@@ -99,9 +99,9 @@ function handleUploadReport(payload) {
     if (fileType === 'pdf') {
       ocrResult = runOcr(fileId, yearMonth, driver.lineUserId, null, null, base64);
     } else {
-      var leftBase64  = payload.fileBase64Left  || base64;
-      var rightBase64 = payload.fileBase64Right || base64;
-      ocrResult = runOcr(fileId, yearMonth, driver.lineUserId, leftBase64, rightBase64, null);
+      var firstBase64  = payload.fileBase64First  || base64;
+      var secondBase64 = payload.fileBase64Second || base64;
+      ocrResult = runOcr(fileId, yearMonth, driver.lineUserId, firstBase64, secondBase64, null);
     }
   } catch (ocrErr) {
     Logger.log('OCR error: ' + ocrErr.message);
